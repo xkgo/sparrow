@@ -43,15 +43,16 @@ type PropertySource interface {
 
 	/**
 	订阅 Key 变更, 名字唯一
-	@param name 给这个监听器命名，一般标识是谁在监听
+	@param consumer 给这个监听器命名，一般标识是谁在监听
+	@param keyPattern 正则，只要匹配这个pattern 的配置项发生了变更，那么就发布事件
 	@return queue 如果支持，就会返回一个 channel，当配置变更的时候会发送事件过去
 	@return support 表示是否支持订阅，一般如果配置来源不会变更的话，就不存在说订阅的问题了
-	如果订阅异常，那么会直接 panic
+	如果订阅异常或者重复订阅的，那么会直接 panic
 	*/
-	SubscribeKeyChange(name string) (queue chan *KeyChangeEvent, support bool)
+	SubscribeKeyChange(consumer, keyPattern string) (queue chan *KeyChangeEvent, support bool)
 
 	/**
-	取消订阅key变更
+	取消订阅keyPattern变更
 	*/
-	UnsubscribeKeyChange(name string)
+	UnsubscribeKeyChange(consumer, keyPattern string)
 }

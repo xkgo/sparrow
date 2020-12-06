@@ -246,3 +246,10 @@ func GetSuffix(str, after string) string {
 
 	return str[index+1:]
 }
+
+func EqualsIgnoreCase(str1, str2 string) bool {
+	if str1 == str2 {
+		return true
+	}
+	return strings.ToLower(str1) == strings.ToLower(str2)
+}

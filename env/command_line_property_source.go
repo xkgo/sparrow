@@ -57,3 +57,32 @@ func NewCommandLinePropertySource(commandLine string) *CommandLinePropertySource
 
 	return source
 }
+
+/**
+获取指定的命令行参数
+*/
+func GetCommandLineProperty(key string) (value string, exists bool) {
+	if len(key) < 1 {
+		return "", false
+	}
+
+	for _, arg := range os.Args {
+		if len(arg) < 4 || !strings.HasPrefix(arg, "--") { // 至少四个字符， --k=
+			continue
+		}
+		// 替换一次
+		arg = StringUtils.Trim(strings.Replace(arg, "--", "", 1))
+		index := strings.Index(arg, "=")
+		if index < 1 {
+			continue
+		}
+
+		k := StringUtils.Trim(arg[0:index])
+
+		if k == key {
+			value := StringUtils.Trim(arg[index+1:])
+			return value, true
+		}
+	}
+	return "", false
+}

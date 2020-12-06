@@ -51,11 +51,11 @@ func (m *MapPropertySource) Each(consumer func(key string, value string) (stop b
 	}
 }
 
-func (m *MapPropertySource) SubscribeKeyChange(name string) (queue chan *KeyChangeEvent, support bool) {
-	logger.Error("Invalid key change event subscribe for MapPropertySource from subscriber:" + name)
+func (m *MapPropertySource) SubscribeKeyChange(consumer, keyPattern string) (queue chan *KeyChangeEvent, support bool) {
+	logger.Error("Invalid key change event subscribe for MapPropertySource from subscriber:" + consumer + ", keyPattern:" + keyPattern)
 	return nil, false
 }
 
-func (m *MapPropertySource) UnsubscribeKeyChange(name string) {
+func (m *MapPropertySource) UnsubscribeKeyChange(consumer, keyPattern string) {
 	// map 不可变，不需要处理
 }
