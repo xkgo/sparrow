@@ -2,6 +2,7 @@ package deploy
 
 import (
 	"github.com/xkgo/sparrow/logger"
+	"github.com/xkgo/sparrow/util/JsonUtils"
 	"github.com/xkgo/sparrow/util/StringUtils"
 	"os"
 	"strings"
@@ -18,7 +19,12 @@ const (
 
 type Info struct {
 	Env        Env               // 当前运行环境
+	Set        string            // 当前部署所在部署集，如所在大区，或者说所在部署集群等标识， 默认就是空字符串
 	Properties map[string]string // 当前运行环境下的属性配置信息， 可能每个部署平台都有自己特殊的一些配置信息
+}
+
+func (i *Info) String() string {
+	return JsonUtils.ToJsonStringWithoutError(i)
 }
 
 // 自定义环境
@@ -172,12 +178,12 @@ func GetInfo() *Info {
 		for _, detect := range registeredDetectList {
 			info := detect.Detect()
 			if nil != info {
-				logger.Info("當前部署检测器检测成功，Detect:"+detect.GetName()+", info:", info)
+				logger.Info("当前部署检测器检测成功，Detect:"+detect.GetName()+", info:", info)
 				return info
 			}
 		}
 	}
 	info := defaultDetect.Detect()
-	logger.Info("當前部署检测器检测成功，Detect:"+defaultDetect.GetName()+", info:", info)
+	logger.Info("当前部署检测器检测成功，Detect:"+defaultDetect.GetName()+", info:", info)
 	return info
 }

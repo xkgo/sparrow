@@ -34,6 +34,31 @@ type MutablePropertySources struct {
 	不管第一个是否为空字符串都要以第一个元素为准
 	*/
 	propertySourceList []PropertySource // 配置来源列表
+
+	// 监听器
+	listeners []func(self *MutablePropertySources)
+}
+
+func NewMutablePropertySources(propertySourceList ...PropertySource) *MutablePropertySources {
+	if len(propertySourceList) < 1 {
+		propertySourceList = make([]PropertySource, 0)
+	}
+	return &MutablePropertySources{propertySourceList: propertySourceList}
+}
+
+func (s *MutablePropertySources) Subscribe(listener func(self *MutablePropertySources)) {
+	if s.listeners == nil {
+		s.listeners = make([]func(self *MutablePropertySources), 0)
+	}
+	s.listeners = append(s.listeners, listener)
+}
+
+func (s *MutablePropertySources) onPropertySourceChanged() {
+	if len(s.listeners) > 0 {
+		for _, listener := range s.listeners {
+			listener(s)
+		}
+	}
 }
 
 func (s *MutablePropertySources) Contains(name string) bool {
@@ -76,6 +101,8 @@ func (s *MutablePropertySources) AddFirst(propertySource PropertySource) {
 	newList = append(newList, propertySource)
 	newList = append(newList, list...)
 	s.propertySourceList = newList
+
+	s.onPropertySourceChanged()
 }
 
 /**
@@ -90,6 +117,8 @@ func (s *MutablePropertySources) AddLast(propertySource PropertySource) {
 	list := s.getPropertySourceList()
 	list = append(list, propertySource)
 	s.propertySourceList = list
+
+	s.onPropertySourceChanged()
 }
 
 /**
@@ -126,6 +155,7 @@ func (s *MutablePropertySources) AddBefore(relativePropertySourceName string, pr
 		newList = append(newList, rightList...)
 	}
 	s.propertySourceList = newList
+	s.onPropertySourceChanged()
 	return nil
 }
 
@@ -165,6 +195,8 @@ func (s *MutablePropertySources) AddAfter(relativePropertySourceName string, pro
 		newList = append(newList, rightList...)
 	}
 	s.propertySourceList = newList
+
+	s.onPropertySourceChanged()
 	return nil
 }
 
@@ -179,11 +211,14 @@ func (s *MutablePropertySources) Replace(name string, propertySource PropertySou
 	}
 	// 直接替换
 	s.propertySourceList[index] = propertySource
+
+	s.onPropertySourceChanged()
 	return nil
 }
 
 func (s *MutablePropertySources) Remove(name string) {
 	s.removeIfPresent(name)
+	s.onPropertySourceChanged()
 }
 
 func (s *MutablePropertySources) Size() int {

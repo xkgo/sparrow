@@ -1,8 +1,24 @@
 package env
 
 import (
+	"encoding/json"
+	"errors"
+	"fmt"
 	"github.com/xkgo/sparrow/deploy"
 	"github.com/xkgo/sparrow/logger"
+	"github.com/xkgo/sparrow/util/ConvertUtils"
+	"github.com/xkgo/sparrow/util/JsonUtils"
+	"github.com/xkgo/sparrow/util/StringUtils"
+	"reflect"
+	"regexp"
+	"strconv"
+)
+
+const (
+	DeployInfoEnvironmentPropertySourceName         = "deployInfoEnvironment"
+	DefaultApplicationEnvironmentPropertySourceName = "defaultApplicationEnvironment"
+	DeployInfoSetKey                                = "deploy.set"
+	DeployInfoEnvKey                                = "deploy.env"
 )
 
 /**
@@ -43,12 +59,10 @@ type StandardEnvironment struct {
 	配置来源，默认是从 profileDirs 中进行检索实例化的，当然，也是可以定义外部配置中心的，比如 apollo、nacos、consul、zookeeper等等
 	默认配置处理逻辑：
 	> 将命令行参数 作为优先级最高的 propertySource， --------- 之后每次向 propertySources 添加元素，都要重新进行日志配置，这样子才能每次应用最新配置
+	> 添加系统环境变量
 	> 自动解析当前运行环境相关属性： 环境(dev,test,fat,prod), set(分组：可能以全球大区、机房等来区分部署集群等等，将这个抽象即可)，将环境相关组成 propertySource ，然后添加进去 propertySources
-	> 关于运行环境属性解析，应该支持扩展，允许注入 不同部署平台检查的插件
-	> 遍历每一个 profileDirs
-	> profileDir 下，查找 application.properties|yml|toml, 以该配置文件后缀作为要使用的配置文件类型（只会加载和这个配置相同后缀的配置文件，因此一个APP使用一种后缀的配置文件即可）
-	> 检查 sparrow.profile.include 配置项，然后进行有序追加
-	> 遍历 activeProfiles, 检查 configDir 下是否有 activeProfile 的，有的话进行初始化，然后追加到 propertySources
+	> 读取默认配置文件 application.properties|yml|toml, 然后添加到 propertySources 的 命令行之后，从 propertySources 中读取 sparrow-profile-include，作为 activeProfiles
+	> 获取 profileDirs 下的所有配置文件，按照profile 分组，然后按照顺序依次加载配置文件，最后按顺序添加到 propertySources 的默认配置文件之后
 	> profileDirs 都加载完成后， 将 additionalPropertySources 添加到 propertySources 之后
 	> 添加系统环境变量到 propertySources 最后面
 	*/
@@ -60,14 +74,9 @@ type StandardEnvironment struct {
 	propertyResolver PropertyResolver
 
 	/**
-	配置key变更订阅列表,map 结构为：consumer->keyPattern->channel
+	配置key变更订阅列表
 	*/
-	keyChangeSubscribers map[string]map[string]chan *KeyChangeEvent
-
-	/**
-	配置key变更队列，每一个PropertySource 都会有一个
-	*/
-	keyChangeQueues []chan *KeyChangeEvent
+	propertyChangeListeners []*PropertyChangeListener
 }
 
 /**
@@ -75,7 +84,8 @@ type StandardEnvironment struct {
 */
 func New(options ...Option) *StandardEnvironment {
 	env := &StandardEnvironment{
-		options: &Options{},
+		options:                 &Options{},
+		propertyChangeListeners: make([]*PropertyChangeListener, 0),
 	}
 
 	// 设置选项
@@ -85,13 +95,114 @@ func New(options ...Option) *StandardEnvironment {
 		}
 	}
 
+	env.propertySources = NewMutablePropertySources()
+	env.propertySources.Subscribe(func(self *MutablePropertySources) {
+		prop := &logger.Properties{}
+		_ = env.doBindProperties("logger.", prop, false)
+
+		logger.Info("property source changed, will reset logger: ", JsonUtils.ToJsonStringWithoutError(prop))
+
+		var log logger.Logger = logger.NewZapLogger(prop)
+
+		if env.deployInfo != nil && env.deployInfo.Env == deploy.Dev {
+			logger.SetConsoleLogger(logger.NewConsoleLogger(prop))
+		} else {
+			logger.SetRootLogger(log)
+			logger.SetConsoleLogger(nil)
+		}
+	})
+
+	// 将命令行参数作为最高优先级的属性来源
+	env.propertySources.AddLast(NewCommandLinePropertySource(""))
+	// 添加系统环境变量
+	env.propertySources.AddLast(NewSystemEnvironmentPropertySource())
+
+	// 添加部署信息到配置来源
 	// 获取部署信息
 	env.deployInfo = deploy.GetInfo()
+	deployProperties := env.deployInfo.Properties
+	if deployProperties == nil {
+		deployProperties = make(map[string]string)
+	}
+	deployProperties[DeployInfoEnvKey] = string(env.deployInfo.Env)
+	deployProperties[DeployInfoSetKey] = env.deployInfo.Set
+	env.propertySources.AddLast(NewMapPropertySource(DeployInfoEnvironmentPropertySourceName, deployProperties))
 
 	// 计算 profileDirs
 	env.profileDirs = resolveProfileDirs(env.options.profileDirs)
 
-	// 计算 profiles
+	if env.profileDirs != nil && len(env.profileDirs) > 0 {
+		// 读取默认配置文件 application.properties|yml|toml, 然后添加到 propertySources 的 命令行之后，从 propertySources 中读取 sparrow-profile-include，作为 activeProfiles
+		defaultProfileInfo := getFirstDefaultApplicationProfileInfo(env.profileDirs)
+		if nil != defaultProfileInfo {
+			defaultPropertySource, err := ReadLocalFileAsPropertySource(DefaultApplicationEnvironmentPropertySourceName, defaultProfileInfo.path)
+			if err != nil {
+				errMsg := "读取默认配置文件异常:" + defaultProfileInfo.path + ", err:" + err.Error()
+				logger.Error(errMsg, err)
+				panic(err)
+			}
+			env.propertySources.AddFirst(defaultPropertySource)
+		} else {
+			// 添加一个空的默认配置来源
+			env.propertySources.AddFirst(NewMapPropertySource(DefaultApplicationEnvironmentPropertySourceName, make(map[string]string)))
+		}
+
+		// 读取激活的 profiles
+		include, _ := env.GetProperty(SparrowProfileIncludeKey)
+		if len(include) < 1 {
+			// 默认激活配置
+			include = env.ResolvePlaceholders(fmt.Sprintf("${%s},${%s},${%s}-${%s}", DeployInfoSetKey, DeployInfoEnvKey, DeployInfoSetKey, DeployInfoEnvKey))
+		}
+
+		if len(include) > 0 {
+			env.activeProfiles = StringUtils.SplitByRegex(include, "[,，;；\\s]+")
+			actives := make(map[string]bool)
+			for _, profile := range env.activeProfiles {
+				actives[profile] = true
+			}
+			activeProfileInfos := getNotDefaultProfileInfoWithExtension(env.profileDirs, "")
+			if len(activeProfileInfos) > 0 {
+				for _, pis := range activeProfileInfos {
+					onlyOne := len(pis) == 1
+					for idx, pi := range pis {
+						if !actives[pi.profile] {
+							continue
+						}
+						name := pi.profile
+						if !onlyOne {
+							name = name + "_" + strconv.FormatInt(int64(idx), 10)
+						}
+						source, err := ReadLocalFileAsPropertySource(name, pi.path)
+						if err != nil {
+							errMsg := "读取默认ActiveProfile文件异常, " + pi.path + ", err:" + err.Error()
+							logger.Error(errMsg, err)
+							panic(err)
+						}
+						err = env.propertySources.AddBefore(DefaultApplicationEnvironmentPropertySourceName, source)
+						if err != nil {
+							errMsg := "添加profile[" + name + "]到默认应用profile[" + DefaultApplicationEnvironmentPropertySourceName + "]异常, " + pi.path + ", err:" + err.Error()
+							logger.Error(errMsg, err)
+							panic(err)
+						}
+					}
+				}
+			}
+		}
+	}
+
+	// 将 additionalPropertySources 添加到 propertySources 之后
+	additionalPropertySources := env.options.additionalPropertySources
+	if nil != additionalPropertySources && len(additionalPropertySources.propertySourceList) > 0 {
+		additionalPropertySources.Each(func(index int, source PropertySource) (stop bool) {
+			if !env.propertySources.Contains(source.GetName()) {
+				env.propertySources.AddLast(source)
+			}
+			return false
+		})
+	}
+
+	// 刷新、初始化
+	env.refresh()
 
 	return env
 }
@@ -176,40 +287,183 @@ func (s *StandardEnvironment) Merge(parent Environment) {
 	}
 }
 
-func (s *StandardEnvironment) SubscribeKeyChange(consumer, keyPattern string) (queue chan *KeyChangeEvent) {
-	if s.keyChangeSubscribers == nil {
-		s.keyChangeSubscribers = make(map[string]map[string]chan *KeyChangeEvent)
+func (s *StandardEnvironment) Subscribe(keyPattern string, handler func(event *KeyChangeEvent)) {
+	if s.propertyChangeListeners == nil {
+		s.propertyChangeListeners = make([]*PropertyChangeListener, 0)
 	}
-	keyPatternSubscribers, ok := s.keyChangeSubscribers[consumer]
-	if ok {
-		if subscriber, ex := keyPatternSubscribers[keyPattern]; ex && subscriber != nil {
-			// 重复订阅的，那么会直接 panic
-			errMsg := "Duplicate subscribe from consumer [" + consumer + "],keyPattern:[" + keyPattern + "]"
-			logger.Fatal(errMsg)
-			panic(errMsg)
-		} else {
-			queue = make(chan *KeyChangeEvent)
-			keyPatternSubscribers[keyPattern] = queue
-			return queue
+	s.propertyChangeListeners = append(s.propertyChangeListeners, NewPropertyChangeListener(keyPattern, handler))
+}
+
+func (s *StandardEnvironment) refresh() {
+	s.initPropertySourceListen()
+}
+
+func (s *StandardEnvironment) initPropertySourceListen() {
+	// 执行所有配置来源的监听
+	s.propertySources.Each(func(index int, source PropertySource) (stop bool) {
+		source.Subscribe("*", func() func(event *KeyChangeEvent) {
+			return func(event *KeyChangeEvent) {
+				logger.Info("收到配置来源["+source.GetName()+"]的配置变更事件：", event)
+				s.onKeyChangeEvent(source, event)
+			}
+		}())
+		return false
+	})
+}
+
+/**
+Key 变更处理
+*/
+func (s *StandardEnvironment) onKeyChangeEvent(source PropertySource, event *KeyChangeEvent) {
+	// 执行监听器
+	if len(s.propertyChangeListeners) > 0 {
+		for _, listener := range s.propertyChangeListeners {
+			keyPattern := listener.KeyPattern
+			handler := listener.Handler
+			if handler == nil {
+				continue
+			}
+			if keyPattern == "" || keyPattern == "*" || keyPattern == event.Key {
+				handler(event)
+				continue
+			}
+			regex, err := regexp.Compile(keyPattern)
+			if err == nil && regex.MatchString(event.Key) {
+				handler(event)
+			}
 		}
-	} else {
-		queue = make(chan *KeyChangeEvent)
-		s.keyChangeSubscribers[consumer] = map[string]chan *KeyChangeEvent{
-			keyPattern: queue,
-		}
-		return queue
 	}
 }
 
-func (s *StandardEnvironment) UnsubscribeKeyChange(consumer, keyPattern string) {
-	if s.keyChangeSubscribers == nil {
+func (s *StandardEnvironment) BindProperties(keyPrefix string, cfgPtr interface{}) (err error) {
+	return s.doBindProperties(keyPrefix, cfgPtr, true)
+}
+
+func (s *StandardEnvironment) doBindProperties(keyPrefix string, cfgPtr interface{}, listen bool) (err error) {
+	// 反射解析所有属性
+	t := reflect.TypeOf(cfgPtr)
+	if t.Kind() == reflect.Ptr {
+		t = t.Elem()
+	} else {
+		return errors.New("注册配置Bean异常，必须是指针类型, 当前注册类型为：[" + t.Name() + "], keyPrefix:" + keyPrefix)
+	}
+
+	v := reflect.ValueOf(cfgPtr)
+	if v.Kind() == reflect.Ptr {
+		v = v.Elem()
+	}
+
+	for i := 0; i < t.NumField(); i++ {
+		tfield := t.Field(i)
+		vfield := v.Field(i)
+
+		fieldName := tfield.Name
+
+		// 默认是首字母小写
+		configKey := keyPrefix + StringUtils.FirstLetterLower(fieldName)
+		subKey := tfield.Tag.Get("ck")
+		if len(subKey) > 0 {
+			configKey = keyPrefix + subKey
+		}
+
+		// 初始值
+		initVal := tfield.Tag.Get("def")
+
+		// 获取配置的值
+		value, exists := s.GetProperty(configKey)
+		if !exists {
+			value = s.ResolvePlaceholders(initVal)
+		}
+		// 反射进行配置回写
+		s.applyBeanPropertyValue(&t, &tfield, &vfield, initVal, value, PropertyUpdate)
+
+		if listen {
+			// 注册监听器, 占位符问题，每次变更的话，都需要重新检查占位符，当占位符变化这个也要变化
+			s.Subscribe(configKey, func() func(event *KeyChangeEvent) {
+				return func(event *KeyChangeEvent) {
+					s.applyBeanPropertyValue(&t, &tfield, &vfield, initVal, event.Nv, event.ChangeType)
+				}
+			}())
+		}
+	}
+	jsonText, err := json.Marshal(cfgPtr)
+	if err != nil {
 		return
 	}
-	keyPatternSubscribers, ok := s.keyChangeSubscribers[consumer]
-	if ok {
-		if subscriber, ex := keyPatternSubscribers[keyPattern]; ex && subscriber != nil {
-			logger.Info("Unsubscribe from consumer ["+consumer+"],keyPattern:["+keyPattern+"], subscriber:", subscriber)
-			close(subscriber)
+	logger.Info("绑定配置Bean["+t.Name()+"] => ", string(jsonText))
+	return
+}
+
+func (s *StandardEnvironment) applyBeanPropertyValue(beanType *reflect.Type, tfield *reflect.StructField, vfield *reflect.Value, initVal string, value string, changeType KeyChangeType) {
+	if PropertyDel == changeType {
+		// 删除，设置回原来的初始值
+		value = initVal
+	}
+
+	var cerr error
+
+	defer func() {
+		if r := recover(); r != nil {
+			logger.Error("配置转换异常：panic,Property:[" + (*beanType).Name() + "." + tfield.Name + ":" + tfield.Type.Name() + "], newVal:[" + value + "]")
+		} else {
+			if cerr != nil {
+				logger.Error("配置转换失败,Property:[" + (*beanType).Name() + "." + tfield.Name + ":" + tfield.Type.Name() + "], newVal:[" + value + "]")
+			}
+		}
+	}()
+
+	typeName := tfield.Type.Name()
+	switch typeName {
+	case "string":
+		vfield.SetString(value)
+	case "bool":
+		if len(value) < 1 {
+			value = "false"
+		}
+		if val, err := ConvertUtils.ToBool(value); err == nil {
+			vfield.SetBool(val)
+		} else {
+			cerr = err
+		}
+	case "int", "int8", "int16", "int32", "int64":
+		if len(value) < 1 {
+			value = "0"
+		}
+		if val, err := ConvertUtils.ToInt64(value); err == nil {
+			vfield.SetInt(val)
+		} else {
+			cerr = err
+		}
+	case "uint", "uint8", "uint16", "uint32", "uint64":
+		if len(value) < 1 {
+			value = "0"
+		}
+		if val, err := ConvertUtils.ToUint64(value); err == nil {
+			vfield.SetUint(val)
+		} else {
+			cerr = err
+		}
+	case "float32", "float64":
+		if len(value) < 1 {
+			value = "0"
+		}
+		if val, err := ConvertUtils.ToFloat64(value); err == nil {
+			vfield.SetFloat(val)
+		} else {
+			cerr = err
+		}
+	default:
+		// 其他的，使用 JSON 转换
+		rval := reflect.New(tfield.Type)
+		aval := rval.Interface()
+
+		if len(value) > 0 {
+			cerr = json.Unmarshal([]byte(value), aval)
+			if cerr == nil {
+				vfield.Set(rval.Elem())
+			}
+		} else {
+			vfield.Set(rval.Elem())
 		}
 	}
 }

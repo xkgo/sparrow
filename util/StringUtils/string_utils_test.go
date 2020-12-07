@@ -1,6 +1,7 @@
 package StringUtils
 
 import (
+	"fmt"
 	"github.com/stretchr/testify/assert"
 	"testing"
 )
@@ -49,5 +50,17 @@ func TestIndexFrom(t *testing.T) {
 
 	index, err = IndexFrom("0123456", "23", 6)
 	assert.NotNil(t, err)
+
+}
+
+func TestReplaceRange(t *testing.T) {
+
+	str := "test-${my.var1}"
+	propVal := "additional1"
+	startIndex := 5
+	endIndex := 14
+	placeholderSuffix := "}"
+
+	fmt.Println(ReplaceRange(str, propVal, startIndex, endIndex+len(placeholderSuffix)))
 
 }

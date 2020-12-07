@@ -10,6 +10,14 @@ type ConsoleLogger struct {
 	Level Level // 日志级别
 }
 
+func NewConsoleLogger(properties *Properties) *ConsoleLogger {
+	level := DebugLevel
+	if properties != nil && len(properties.Level) > 0 {
+		level = ParseLevel(properties.Level)
+	}
+	return &ConsoleLogger{Level: level}
+}
+
 func (c *ConsoleLogger) IsDebugEnabled() bool {
 	return c.Level >= DebugLevel
 }

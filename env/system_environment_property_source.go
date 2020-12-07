@@ -1,6 +1,9 @@
 package env
 
-import "os"
+import (
+	"github.com/xkgo/sparrow/util/StringUtils"
+	"os"
+)
 
 const (
 	/** 系统环境变量 PropertySource GetName */
@@ -19,9 +22,14 @@ func NewSystemEnvironmentPropertySource() *SystemEnvironmentPropertySource {
 	source.name = SystemEnvironmentPropertySourceName
 	source.properties = make(map[string]string)
 
-	keys := os.Environ()
-	for _, key := range keys {
-		source.properties[key] = os.Getenv(key)
+	envs := os.Environ()
+	for _, kv := range envs {
+		kvs := StringUtils.SplitByRegex(kv, "\\s*=\\s*")
+		if len(kvs) == 1 {
+			source.properties[StringUtils.Trim(kvs[0])] = ""
+		} else if len(kvs) == 2 {
+			source.properties[StringUtils.Trim(kvs[0])] = StringUtils.Trim(kvs[1])
+		}
 	}
 	return source
 }

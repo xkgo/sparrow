@@ -7,7 +7,7 @@ type Environment interface {
 	PropertyResolver
 
 	/**
-	获取激活的配置列表，返回文件的绝对路径， TODO 确定指定配置文件的方式
+	获取激活的配置列表，返回文件的绝对路径
 	*/
 	GetActiveProfiles() []string
 
@@ -22,16 +22,12 @@ type Environment interface {
 	Merge(parent Environment)
 
 	/**
-	订阅 Key 变更, 名字唯一
-	@param consumer 给这个监听器命名，一般标识是谁在监听
-	@param keyPattern 正则，只要匹配这个pattern 的配置项发生了变更，那么就发布事件
-	@return queue 如果支持，就会返回一个 channel，当配置变更的时候会发送事件过去
-	如果订阅异常或者重复订阅的，那么会直接 panic
+	订阅变更, keyPattern: 等值、正则匹配，如果为空字符串或者 * 那么表示所有，如果是个合法的正则，那么就按照正则匹配
 	*/
-	SubscribeKeyChange(consumer, keyPattern string) (queue chan *KeyChangeEvent)
+	Subscribe(keyPattern string, handler func(event *KeyChangeEvent))
 
 	/**
-	取消订阅keyPattern变更
+	绑定配置项到某个模型对象，注意传进来的必须是指针类型, keyPrefix key前缀，会直接和配置struct的属性直接拼接，如果有.的话要注意了
 	*/
-	UnsubscribeKeyChange(consumer, keyPattern string)
+	BindProperties(keyPrefix string, cfgPtr interface{}) (err error)
 }

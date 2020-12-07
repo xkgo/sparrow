@@ -7,17 +7,11 @@ import (
 	"unicode"
 )
 
-var blankRegex *regexp.Regexp
-var trimRegex *regexp.Regexp
+var blankRegex, _ = regexp.Compile("^\\s+$")
+var trimRegex = regexp.MustCompile("(^\\s+)|(\\s+$)")
 
 // 邮箱地址正则
-var emailRegex *regexp.Regexp
-
-func init() {
-	blankRegex, _ = regexp.Compile("^\\s+$")
-	trimRegex = regexp.MustCompile("(^\\s+)|(\\s+$)")
-	emailRegex = regexp.MustCompile(`^\w+([-+.]\w+)*@\w+([-.]\w+)*\.\w+([-.]\w+)*$`)
-}
+var emailRegex = regexp.MustCompile(`^\w+([-+.]\w+)*@\w+([-.]\w+)*\.\w+([-.]\w+)*$`)
 
 /**
 检查给定的字符串从 index 开始，是否一直匹配 substring
@@ -72,8 +66,11 @@ fromIndex include
 endIndex exclude
 */
 func ReplaceRange(source, newVal string, fromIndex, endIndex int) (val string, err error) {
-	if len(source) < fromIndex+len(newVal) {
-		return source, errors.New("newVal out of range for source")
+	if len(source) <= fromIndex {
+		return source, errors.New("fromIndex out of range for source")
+	}
+	if len(source) < endIndex {
+		return source, errors.New("endIndex out of range for source")
 	}
 
 	prefix := source[0:fromIndex]

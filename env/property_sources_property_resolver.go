@@ -49,9 +49,6 @@ func (p *PropertySourcesPropertyResolver) doGetProperty(key string, resolveNeste
 		return "", false
 	}
 	p.propertySources.Each(func(index int, source PropertySource) (stop bool) {
-		if logger.IsDebugEnabled() {
-			logger.Debug("Searching for key '" + key + "' in PropertySource '" + source.GetName() + "'")
-		}
 		if val, ok := source.GetProperty(key); ok {
 			exists = true
 			value = val

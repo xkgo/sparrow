@@ -1,5 +1,10 @@
 package env
 
+import (
+	"fmt"
+	"regexp"
+)
+
 // 属性变更类型
 type KeyChangeType string
 
@@ -11,10 +16,32 @@ const (
 
 // 配置变更事件
 type KeyChangeEvent struct {
-	key        string        // 变更的配置 key
-	ov         string        // 旧值
-	nv         string        // 新值
-	changeType KeyChangeType // 变更类型
+	Key        string        // 变更的配置 key
+	Ov         string        // 旧值
+	Nv         string        // 新值
+	ChangeType KeyChangeType // 变更类型
+}
+
+func (e *KeyChangeEvent) String() string {
+	return fmt.Sprintf("[%v][%s], old:[%s], new:[%s]", e.ChangeType, e.Key, e.Ov, e.Nv)
+}
+
+type PropertyChangeListener struct {
+	KeyPattern string                      // 等值、正则匹配，如果为空字符串或者 * 那么表示所有，如果是个合法的正则，那么就按照正则匹配
+	Regex      *regexp.Regexp              // 正则表达式
+	Handler    func(event *KeyChangeEvent) // 处理器
+}
+
+func NewPropertyChangeListener(keyPattern string, handler func(event *KeyChangeEvent)) *PropertyChangeListener {
+	var regex *regexp.Regexp
+	if keyPattern != "" && keyPattern != "*" {
+		regex, _ = regexp.Compile(keyPattern)
+	}
+	return &PropertyChangeListener{
+		KeyPattern: keyPattern,
+		Regex:      regex,
+		Handler:    handler,
+	}
 }
 
 type PropertySource interface {
@@ -42,17 +69,7 @@ type PropertySource interface {
 	Each(consumer func(key, value string) (stop bool))
 
 	/**
-	订阅 Key 变更, 名字唯一
-	@param consumer 给这个监听器命名，一般标识是谁在监听
-	@param keyPattern 正则，只要匹配这个pattern 的配置项发生了变更，那么就发布事件
-	@return queue 如果支持，就会返回一个 channel，当配置变更的时候会发送事件过去
-	@return support 表示是否支持订阅，一般如果配置来源不会变更的话，就不存在说订阅的问题了
-	如果订阅异常或者重复订阅的，那么会直接 panic
+	订阅变更, keyPattern: 等值、正则匹配，如果为空字符串或者 * 那么表示所有，如果是个合法的正则，那么就按照正则匹配
 	*/
-	SubscribeKeyChange(consumer, keyPattern string) (queue chan *KeyChangeEvent, support bool)
-
-	/**
-	取消订阅keyPattern变更
-	*/
-	UnsubscribeKeyChange(consumer, keyPattern string)
+	Subscribe(keyPattern string, handler func(event *KeyChangeEvent))
 }

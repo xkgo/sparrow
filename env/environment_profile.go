@@ -1,15 +1,21 @@
 package env
 
 import (
+	"bytes"
+	"github.com/magiconair/properties"
+	"github.com/spf13/afero"
+	"github.com/spf13/viper"
+	"github.com/xkgo/sparrow/logger"
 	"github.com/xkgo/sparrow/util/FileUtils"
 	"github.com/xkgo/sparrow/util/StringUtils"
 	"os"
+	"path/filepath"
 	"regexp"
 )
 
 const (
-	// sparrow profile dirs key
-	SparrowProfileDirsKey = "sparrow-profile-dirs"
+	SparrowProfileDirsKey    = "sparrow.profile.dirs"    // sparrow profile dirs key
+	SparrowProfileIncludeKey = "sparrow.profile.include" // 包含哪些profile
 )
 
 /*
@@ -85,7 +91,7 @@ func filterAndGetValidProfileDirs(profileDirs []string) []string {
 	return validProfileDirs
 }
 
-var applicationFileRegex, _ = regexp.Compile("(?i)^application.*\\.(properties|yml|toml)$")
+var applicationFileRegex, _ = regexp.Compile("(?i)^application-?(.*)\\.(properties|yml|toml)$")
 
 /**
 检查是否是合法的 profileDir 目录，合法的定义：
@@ -106,4 +112,124 @@ func ListDirApplicationFiles(dir string) []*FileUtils.FileInfo {
 		}
 		return applicationFileRegex.MatchString(fileInfo.Name())
 	}, 1)
+}
+
+type profileInfo struct {
+	profile   string // 所属profile，默认是 ""
+	extension string // 扩展名，含 .
+	path      string // 文件绝对路径
+}
+
+var defaultApplicationFileRegex, _ = regexp.Compile("(?i)^application\\.(properties|yml|toml)$")
+
+func getFirstDefaultApplicationProfileInfo(profileDirs []string) *profileInfo {
+	if len(profileDirs) < 1 {
+		return nil
+	}
+
+	for _, profileDir := range profileDirs {
+		applicationFiles := FileUtils.ListDirFiles(profileDir, func(fileInfo os.FileInfo) bool {
+			if !fileInfo.IsDir() && defaultApplicationFileRegex.MatchString(fileInfo.Name()) {
+				return true
+			}
+			return false
+		}, 1)
+		if len(applicationFiles) > 0 {
+			applicationFile := applicationFiles[0]
+			return &profileInfo{
+				profile:   "",
+				extension: filepath.Ext(applicationFile.Path),
+				path:      applicationFile.Path,
+			}
+		}
+	}
+
+	return nil
+}
+
+func getNotDefaultProfileInfoWithExtension(profileDirs []string, extension string) map[string][]*profileInfo {
+	if len(profileDirs) < 1 {
+		return nil
+	}
+
+	result := make(map[string][]*profileInfo)
+	for _, profileDir := range profileDirs {
+		applicationFiles := FileUtils.ListDirFiles(profileDir, func(fileInfo os.FileInfo) bool {
+			if !fileInfo.IsDir() && applicationFileRegex.MatchString(fileInfo.Name()) {
+				if len(extension) < 1 || StringUtils.EqualsIgnoreCase(filepath.Ext(fileInfo.Name()), extension) {
+					return true
+				}
+			}
+			return false
+		}, 1)
+
+		for _, applicationFile := range applicationFiles {
+			pi := &profileInfo{
+				profile:   applicationFileRegex.ReplaceAllString(applicationFile.Info.Name(), "$1"),
+				extension: filepath.Ext(applicationFile.Path),
+				path:      applicationFile.Path,
+			}
+			if len(pi.profile) < 1 {
+				continue
+			}
+			subList, ok := result[pi.profile]
+			if !ok || len(subList) < 1 {
+				subList = append(make([]*profileInfo, 0), pi)
+				result[pi.profile] = subList
+			} else {
+				result[pi.profile] = append(subList, pi)
+			}
+		}
+	}
+	return result
+}
+
+func ReadLocalFileAsPropertySource(name string, path string) (propertySource PropertySource, err error) {
+	logger.Info("Reader local file as PropertySource, name:", name, ", filepath:"+path)
+
+	props := make(map[string]string)
+
+	// 检查是否是 .properties， props， prop 后缀的配置文件，如果是的话，自己解析，因为 viper 解析这类配置文件的时候，会自动替换占位符，这个不符合预期
+	ext := filepath.Ext(path)
+	if StringUtils.EqualsIgnoreCase(ext, ".properties") || StringUtils.EqualsIgnoreCase(ext, ".props") || StringUtils.EqualsIgnoreCase(ext, ".prop") {
+		file, err := afero.ReadFile(afero.NewOsFs(), path)
+		if err != nil {
+			return nil, err
+		}
+
+		in := bytes.NewReader(file)
+		buf := new(bytes.Buffer)
+		_, err = buf.ReadFrom(in)
+		if err != nil {
+			return nil, err
+		}
+
+		tempProperties := properties.NewProperties()
+		tempProperties.Postfix = ""
+		tempProperties.Prefix = ""
+		err = tempProperties.Load(buf.Bytes(), properties.UTF8)
+		if err != nil {
+			return nil, err
+		}
+
+		for _, key := range tempProperties.Keys() {
+			if val, ok := tempProperties.Get(key); ok {
+				props[key] = val
+			}
+		}
+	} else {
+		v := viper.New()
+		v.SetConfigFile(path)
+		err = v.ReadInConfig()
+		if err != nil {
+			return
+		}
+
+		keys := v.AllKeys()
+		for _, key := range keys {
+			value := v.GetString(key)
+			props[key] = value
+		}
+	}
+	return NewMapPropertySource(name, props), nil
 }
