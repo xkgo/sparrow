@@ -1,5 +1,7 @@
 package env
 
+import "github.com/xkgo/sparrow/deploy"
+
 // 选项
 type Option func(environment *StandardEnvironment)
 
@@ -19,6 +21,21 @@ type Options struct {
 	是否忽略无法处理的占位符，如果忽略则不处理，不忽略的话，那么遇到不能解析的占位符直接 panic
 	*/
 	ignoreUnresolvableNestedPlaceholders bool
+
+	/**
+	自定义部署信息，如果设置了这个，那么直接以这个为准
+	*/
+	customDeployInfo *deploy.Info
+
+	/**
+	附加的命令行参数，如果原来有命令参数，再继续追加的话，原来相同key的会被覆盖
+	*/
+	appendCommandLine string
+
+	/**
+	追加的profiles，会放到 原来的之后
+	*/
+	appendProfiles []string
 }
 
 /**
@@ -46,5 +63,35 @@ func AdditionalPropertySources(additionalPropertySources *MutablePropertySources
 func IgnoreUnresolvableNestedPlaceholders(ignore bool) Option {
 	return func(environment *StandardEnvironment) {
 		environment.ignoreUnresolvableNestedPlaceholders = ignore
+	}
+}
+
+/**
+自定义部署信息，如果这个设置了的话，直接使用这个部署信息，而不是用检测的，一般用于本地测试
+*/
+func DeployInfo(info *deploy.Info) Option {
+	return func(environment *StandardEnvironment) {
+		environment.options.customDeployInfo = info
+	}
+}
+
+/**
+追加命令行参数，如果原来有命令参数，再继续追加的话，原来相同key的会被覆盖
+*/
+func AppendCommandLine(commandLine string) Option {
+	return func(environment *StandardEnvironment) {
+		environment.options.appendCommandLine = environment.options.appendCommandLine + " " + commandLine
+	}
+}
+
+/**
+包含 profiles, 会放在系统计算的之后
+*/
+func IncludeProfiles(profiles ...string) Option {
+	return func(environment *StandardEnvironment) {
+		if nil == environment.options.appendProfiles {
+			environment.options.appendProfiles = make([]string, 0)
+		}
+		environment.options.appendProfiles = append(environment.options.appendProfiles, profiles...)
 	}
 }

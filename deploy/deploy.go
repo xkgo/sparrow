@@ -60,6 +60,18 @@ func ParseEnv(env string) Env {
 }
 
 /**
+自定义部署信息，如果设置了这个，那么直接以这个为准
+*/
+var customDeployInfo *Info
+
+/**
+如果设置了这个，那么直接返回这个值，一般用来测试
+*/
+func SetCustom(info *Info) {
+	customDeployInfo = info
+}
+
+/**
 部署信息检测
 */
 type Detect interface {
@@ -174,6 +186,9 @@ func AddFirst(name string, handler func() *Info) {
 获取当前部署环境信息
 */
 func GetInfo() *Info {
+	if nil != customDeployInfo {
+		return customDeployInfo
+	}
 	if registeredDetectList != nil && len(registeredDetectList) > 0 {
 		for _, detect := range registeredDetectList {
 			info := detect.Detect()

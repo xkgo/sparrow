@@ -112,21 +112,27 @@ func New(options ...Option) *StandardEnvironment {
 		}
 	})
 
+	if env.options.customDeployInfo != nil {
+		env.deployInfo = env.options.customDeployInfo
+	}
+
 	// 将命令行参数作为最高优先级的属性来源
-	env.propertySources.AddLast(NewCommandLinePropertySource(""))
+	env.propertySources.AddLast(NewCommandLinePropertySource(env.options.appendCommandLine))
 	// 添加系统环境变量
 	env.propertySources.AddLast(NewSystemEnvironmentPropertySource())
 
-	// 添加部署信息到配置来源
-	// 获取部署信息
-	env.deployInfo = deploy.GetInfo()
-	deployProperties := env.deployInfo.Properties
-	if deployProperties == nil {
-		deployProperties = make(map[string]string)
+	if env.deployInfo == nil {
+		// 添加部署信息到配置来源
+		// 获取部署信息
+		env.deployInfo = deploy.GetInfo()
+		deployProperties := env.deployInfo.Properties
+		if deployProperties == nil {
+			deployProperties = make(map[string]string)
+		}
 	}
-	deployProperties[DeployInfoEnvKey] = string(env.deployInfo.Env)
-	deployProperties[DeployInfoSetKey] = env.deployInfo.Set
-	env.propertySources.AddLast(NewMapPropertySource(DeployInfoEnvironmentPropertySourceName, deployProperties))
+	env.deployInfo.Properties[DeployInfoEnvKey] = string(env.deployInfo.Env)
+	env.deployInfo.Properties[DeployInfoSetKey] = env.deployInfo.Set
+	env.propertySources.AddLast(NewMapPropertySource(DeployInfoEnvironmentPropertySourceName, env.deployInfo.Properties))
 
 	// 计算 profileDirs
 	env.profileDirs = resolveProfileDirs(env.options.profileDirs)
@@ -156,18 +162,27 @@ func New(options ...Option) *StandardEnvironment {
 
 		if len(include) > 0 {
 			env.activeProfiles = StringUtils.SplitByRegex(include, "[,，;；\\s]+")
-			actives := make(map[string]bool)
-			for _, profile := range env.activeProfiles {
-				actives[profile] = true
-			}
+		}
+		if nil == env.activeProfiles {
+			env.activeProfiles = make([]string, 0)
+		}
+
+		if len(env.options.appendProfiles) > 0 {
+			env.activeProfiles = append(env.options.appendProfiles)
+		}
+
+		if len(env.activeProfiles) > 0 {
 			activeProfileInfos := getNotDefaultProfileInfoWithExtension(env.profileDirs, "")
-			if len(activeProfileInfos) > 0 {
-				for _, pis := range activeProfileInfos {
+			includedProfiles := make(map[string]bool)
+			for _, profile := range env.activeProfiles {
+				if include, ok := includedProfiles[profile]; ok && include {
+					continue
+				}
+				includedProfiles[profile] = true
+
+				if pis, e := activeProfileInfos[profile]; e && pis != nil {
 					onlyOne := len(pis) == 1
 					for idx, pi := range pis {
-						if !actives[pi.profile] {
-							continue
-						}
 						name := pi.profile
 						if !onlyOne {
 							name = name + "_" + strconv.FormatInt(int64(idx), 10)
@@ -188,6 +203,7 @@ func New(options ...Option) *StandardEnvironment {
 				}
 			}
 		}
+
 	}
 
 	// 将 additionalPropertySources 添加到 propertySources 之后

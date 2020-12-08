@@ -22,12 +22,10 @@ type CommandLinePropertySource struct {
 	MapPropertySource
 }
 
-func NewCommandLinePropertySource(commandLine string) *CommandLinePropertySource {
-	var args []string
-	if len(commandLine) < 1 {
-		args = os.Args
-	} else {
-		args = StringUtils.SplitByRegex(commandLine, "\\s+")
+func NewCommandLinePropertySource(appendCommandLine string) *CommandLinePropertySource {
+	var args []string = os.Args
+	if len(appendCommandLine) > 4 {
+		args = append(args, StringUtils.SplitByRegex(appendCommandLine, "\\s+")...)
 	}
 
 	name := CommandLineEnvironmentPropertySourceName
