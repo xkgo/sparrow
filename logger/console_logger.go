@@ -3,19 +3,15 @@ package logger
 import (
 	"context"
 	"fmt"
+	"runtime"
+	"strconv"
+	"strings"
 	"time"
 )
 
 type ConsoleLogger struct {
-	Level Level // 日志级别
-}
-
-func NewConsoleLogger(properties *Properties) *ConsoleLogger {
-	level := DebugLevel
-	if properties != nil && len(properties.Level) > 0 {
-		level = ParseLevel(properties.Level)
-	}
-	return &ConsoleLogger{Level: level}
+	Level            Level // 日志级别
+	CallerSkipOffset int   // 输出日志时候，计算输入日志的日志所在文件和行数偏移，一般给应用进行二次封装使用，正负数都可以
 }
 
 func (c *ConsoleLogger) IsDebugEnabled() bool {
@@ -50,8 +46,43 @@ func (c *ConsoleLogger) log(context *context.Context, level Level, template stri
 	} else if msg != "" && len(fmtArgs) > 0 {
 		msg = fmt.Sprintf(template, fmtArgs...)
 	}
-	timeLabel := time.Now().Format("2006-01-02 15:04:05.000")
-	fmt.Println(timeLabel, level, msg)
+	now := time.Now()
+	zone, offset := now.Zone()
+	timeLabel := now.Format("2006-01-02 15:04:05.000")
+	timeLabel = timeLabel + ":" + zone + ":" + strconv.FormatInt(int64(offset), 10)
+
+	_, file, line, ok := runtime.Caller(4 + c.CallerSkipOffset)
+	if ok {
+
+		idx := strings.LastIndexByte(file, '/')
+		if idx != -1 {
+			// Find the penultimate separator.
+			idx = strings.LastIndexByte(file[:idx], '/')
+			if idx != -1 {
+				file = file[idx+1:]
+			}
+		}
+
+		msg = file + ":" + strconv.FormatInt(int64(line), 10) + "\t" + msg
+	}
+	msg = timeLabel + "\t" + level.String() + "\t" + msg
+
+	fmt.Println(msg)
+
+	// 如果是 ERROR，FATAL 则输出堆栈信息
+	if level >= ErrorLevel {
+		buff := make([]byte, 1<<10)
+		// 堆栈信息
+		runtime.Stack(buff, true)
+		fmt.Printf("%v", string(buff))
+	}
+
+}
+
+func (c *ConsoleLogger) Flush() {}
+
+func (c *ConsoleLogger) GetLevel() Level {
+	return c.Level
 }
 
 func (c *ConsoleLogger) Debug(v ...interface{}) {

@@ -16,11 +16,13 @@ func TestResolveProfileDirs(t *testing.T) {
 
 func TestGetFirstDefaultApplicationProfileInfo(t *testing.T) {
 
-	pi := getFirstDefaultApplicationProfileInfo([]string{"../testdata"})
+	pis := getDefaultApplicationProfileInfos([]string{"../testdata"})
 
-	fmt.Println(pi.profile)
-	fmt.Println(pi.path)
-	fmt.Println(pi.extension)
+	for _, pi := range pis {
+		fmt.Println(pi.profile)
+		fmt.Println(pi.path)
+		fmt.Println(pi.extension)
+	}
 }
 
 func TestGetNotDefaultProfileInfoWithExtension(t *testing.T) {

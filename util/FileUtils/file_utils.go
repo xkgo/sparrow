@@ -133,3 +133,46 @@ func ScanParent(path string, consumer func(parent *FileInfo) (stop bool)) error 
 	}
 	return nil
 }
+
+/**
+获取给定路径的上级目录路径，返回的上级目录中，不包含 / 结尾
+实例：
+/data/web/log 		--> /data/web
+E:\data\web\log 	--> E:\data\web
+/					--> ""
+/data			    --> ""
+*/
+func GetParentPath(path string) string {
+	if len(path) < 1 {
+		return ""
+	}
+	var sep1 = '\\'
+	var sep2 = '/'
+
+	strRunes := []rune(path)
+	lastIndex := len(strRunes) - 1
+
+	firstNotSepIndex := lastIndex
+	// 获取第一个不是分隔符的下标
+	for i := lastIndex; i >= 0; i-- {
+		r := strRunes[i]
+		if r != sep1 && r != sep2 {
+			firstNotSepIndex = i
+			break
+		}
+	}
+
+	// 从第一个不是分隔符下标开始对比
+	foundSep := false
+	for i := firstNotSepIndex; i >= 0; i-- {
+		r := strRunes[i]
+		if r != sep1 && r != sep2 {
+			if foundSep {
+				return string(strRunes[0 : i+1])
+			}
+		} else {
+			foundSep = true
+		}
+	}
+	return ""
+}

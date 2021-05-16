@@ -2,12 +2,7 @@ package logger
 
 import (
 	"context"
-	"github.com/natefinch/lumberjack"
 	"go.uber.org/zap"
-	"go.uber.org/zap/zapcore"
-	"path/filepath"
-	"strconv"
-	"time"
 )
 
 type ZapLogger struct {
@@ -15,56 +10,12 @@ type ZapLogger struct {
 	log   *zap.SugaredLogger
 }
 
-func NewZapLogger(properties *Properties) *ZapLogger {
-	level := ParseLevel(properties.Level)
+func (z *ZapLogger) Flush() {
+	_ = z.log.Sync()
+}
 
-	zapLevel := zapcore.DebugLevel
-	switch level {
-	case DebugLevel:
-		zapLevel = zapcore.DebugLevel
-	case InfoLevel:
-		zapLevel = zapcore.InfoLevel
-	case WarnLevel:
-		zapLevel = zapcore.WarnLevel
-	case ErrorLevel:
-		zapLevel = zapcore.ErrorLevel
-	case FatalLevel:
-		zapLevel = zapcore.FatalLevel
-	default:
-		zapLevel = zapcore.DebugLevel
-	}
-
-	// 构造新的
-	var writerSyncer zapcore.WriteSyncer
-	// 输出到文件中去
-	lumberJackLogger := &lumberjack.Logger{
-		Filename:   properties.Dir + string(filepath.Separator) + properties.Filename,
-		MaxSize:    properties.MaxSize,
-		MaxAge:     properties.MaxAge,
-		MaxBackups: properties.MaxBackups,
-		Compress:   properties.Compress,
-	}
-	writerSyncer = zapcore.AddSync(lumberJackLogger)
-
-	var encoder zapcore.Encoder
-	encoderConfig := zap.NewProductionEncoderConfig()
-	encoderConfig.EncodeTime = zapcore.ISO8601TimeEncoder
-	encoderConfig.EncodeTime = func(t time.Time, enc zapcore.PrimitiveArrayEncoder) {
-		str := t.Format(properties.TimeFormat)
-		zone, offset := t.Zone()
-		enc.AppendString(str + ":" + zone + ":" + strconv.FormatInt(int64(offset), 10))
-	}
-
-	encoderConfig.EncodeLevel = zapcore.CapitalLevelEncoder
-	encoder = zapcore.NewConsoleEncoder(encoderConfig)
-
-	var coreConfig = zapcore.NewCore(encoder, writerSyncer, zapLevel)
-
-	zapLogger := zap.New(coreConfig, zap.AddCaller(), zap.AddStacktrace(zapcore.ErrorLevel), zap.AddCallerSkip(2))
-	return &ZapLogger{
-		Level: level,
-		log:   zapLogger.Sugar(),
-	}
+func (z *ZapLogger) GetLevel() Level {
+	return z.Level
 }
 
 func (z *ZapLogger) IsDebugEnabled() bool {

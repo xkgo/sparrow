@@ -1,5 +1,7 @@
 package env
 
+import "github.com/xkgo/sparrow/deploy"
+
 /*
 环境，包含运行环境、启动项目用到的参数、配置等等
 */
@@ -28,6 +30,30 @@ type Environment interface {
 
 	/**
 	绑定配置项到某个模型对象，注意传进来的必须是指针类型, keyPrefix key前缀，会直接和配置struct的属性直接拼接，如果有.的话要注意了
+	@param name 名称，唯一
+	@param cfgPtr 配置指针
+	@param changedListen 是否需要进行监听
 	*/
-	BindProperties(keyPrefix string, cfgPtr interface{}) (err error)
+	BindProperties(keyPrefix string, cfgPtr interface{}) (beanPtr interface{}, err error)
+
+	BindPropertiesListen(keyPrefix string, cfgPtr interface{}, changedListen bool) (beanPtr interface{}, err error)
+
+	/**
+	获取属性对象
+	@param typeTemplate 类型模板，可以提供属性类型的指针类型，也可以直接提供 reflect.Type 类型
+	*/
+	GetProperties(typeTemplate interface{}) (beanPtr interface{})
+
+	IsDev() bool
+	IsTest() bool
+	IsFat() bool
+	IsProd() bool
+	/**
+	当前环境
+	*/
+	GetEnv() deploy.Env
+	/**
+	部署集合
+	*/
+	GetSet() string
 }

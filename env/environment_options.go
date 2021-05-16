@@ -1,6 +1,9 @@
 package env
 
-import "github.com/xkgo/sparrow/deploy"
+import (
+	"github.com/xkgo/sparrow/deploy"
+	"github.com/xkgo/sparrow/logger"
+)
 
 // 选项
 type Option func(environment *StandardEnvironment)
@@ -93,5 +96,11 @@ func IncludeProfiles(profiles ...string) Option {
 			environment.options.appendProfiles = make([]string, 0)
 		}
 		environment.options.appendProfiles = append(environment.options.appendProfiles, profiles...)
+	}
+}
+
+func TraceIdGenerator(generator logger.TraceIdGenerator) Option {
+	return func(environment *StandardEnvironment) {
+		logger.SetTraceIdGenerator(generator)
 	}
 }

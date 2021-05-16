@@ -1,2 +1,6 @@
 test:
   name: sparrow-${my.val}
+
+sparrow:
+  profile:
+    include: dev

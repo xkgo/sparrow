@@ -80,9 +80,6 @@ func (h *PropertyPlaceholderHelper) parseStringValue(value string, visitedPlaceh
 				}
 				// 将解析出来的值进行替换
 				result, _ = StringUtils.ReplaceRange(result, propVal, startIndex, endIndex+len(h.placeholderSuffix))
-				if logger.IsDebugEnabled() {
-					logger.Debug("Resolved placeholder '" + placeholder + "'")
-				}
 				startIndex, _ = StringUtils.IndexFrom(result, h.placeholderPrefix, startIndex+len(propVal))
 			} else if h.ignoreUnresolvablePlaceholders {
 				// Proceed with unprocessed value.

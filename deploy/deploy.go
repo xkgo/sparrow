@@ -27,6 +27,22 @@ func (i *Info) String() string {
 	return JsonUtils.ToJsonStringWithoutError(i)
 }
 
+func (i *Info) IsDev() bool {
+	return Dev == i.Env
+}
+
+func (i *Info) IsTest() bool {
+	return Test == i.Env
+}
+
+func (i *Info) IsFat() bool {
+	return Fat == i.Env
+}
+
+func (i *Info) IsProd() bool {
+	return Prod == i.Env
+}
+
 // 自定义环境
 var customEnvs = make(map[string]Env)
 
@@ -99,49 +115,7 @@ func (d *DetectWrapper) Detect() *Info {
 }
 
 // 默认部署环境识别实现
-var defaultDetect = &DetectWrapper{
-	Name: "StandardDeploy",
-	Handler: func() *Info {
-		var env = Dev
-
-		defer func() {
-			logger.Info("当前部署环境检测器[StandardDeploy] 检测环境为：", env)
-		}()
-
-		args := os.Args
-
-		if args == nil || len(args) < 1 {
-			return &Info{
-				Env: Dev,
-			}
-		}
-
-		for _, arg := range args {
-			if len(arg) < 4 || !strings.HasPrefix(arg, "--") { // 至少四个字符， --k=
-				continue
-			}
-			// 替换一次
-			arg = StringUtils.Trim(strings.Replace(arg, "--", "", 1))
-			index := strings.Index(arg, "=")
-			if index < 1 {
-				continue
-			}
-
-			key := StringUtils.Trim(arg[0:index])
-
-			if StringUtils.EqualsIgnoreCase(key, "env") {
-				env = ParseEnv(StringUtils.Trim(arg[index+1:]))
-				break
-			}
-		}
-		if len(env) < 1 {
-			env = Dev
-		}
-		return &Info{
-			Env: Dev,
-		}
-	},
-}
+var defaultDetect Detect
 
 // 用户自定义注册的 Detect 列表
 var registeredDetectList = make([]Detect, 0)
@@ -182,6 +156,20 @@ func AddFirst(name string, handler func() *Info) {
 	registeredDetectList = list
 }
 
+func AddLast(name string, handler func() *Info) {
+	if len(name) < 1 || nil == handler {
+		return
+	}
+	var detect Detect = &DetectWrapper{
+		Name:    name,
+		Handler: handler,
+	}
+	if registeredDetectList == nil {
+		registeredDetectList = make([]Detect, 0)
+	}
+	registeredDetectList = append(registeredDetectList, detect)
+}
+
 /**
 获取当前部署环境信息
 */
@@ -192,13 +180,50 @@ func GetInfo() *Info {
 	if registeredDetectList != nil && len(registeredDetectList) > 0 {
 		for _, detect := range registeredDetectList {
 			info := detect.Detect()
+			logger.Infof("正在使用部署平台检测器：%v, 进行j检测", detect.GetName())
 			if nil != info {
 				logger.Info("当前部署检测器检测成功，Detect:"+detect.GetName()+", info:", info)
+				if info.Properties == nil {
+					info.Properties = make(map[string]string)
+				}
 				return info
 			}
 		}
 	}
 	info := defaultDetect.Detect()
 	logger.Info("当前部署检测器检测成功，Detect:"+defaultDetect.GetName()+", info:", info)
+	if info.Properties == nil {
+		info.Properties = make(map[string]string)
+	}
 	return info
+}
+
+/**
+获取命令行参数
+*/
+func GetCommandLineProperties(appendCommandLine string) map[string]string {
+	var args []string = os.Args
+	if len(appendCommandLine) > 4 {
+		args = append(args, StringUtils.SplitByRegex(appendCommandLine, "\\s+")...)
+	}
+
+	properties := make(map[string]string)
+
+	for _, arg := range args {
+		if len(arg) < 4 || !strings.HasPrefix(arg, "--") { // 至少四个字符， --k=
+			continue
+		}
+		// 替换一次
+		arg = StringUtils.Trim(strings.Replace(arg, "--", "", 1))
+		index := strings.Index(arg, "=")
+		if index < 1 {
+			continue
+		}
+
+		key := StringUtils.Trim(arg[0:index])
+		value := StringUtils.Trim(arg[index+1:])
+
+		properties[key] = value
+	}
+	return properties
 }

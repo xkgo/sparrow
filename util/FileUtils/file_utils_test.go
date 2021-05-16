@@ -2,6 +2,7 @@ package FileUtils
 
 import (
 	"fmt"
+	"github.com/magiconair/properties/assert"
 	"testing"
 )
 
@@ -30,4 +31,14 @@ func TestScanParent(t *testing.T) {
 		fmt.Println(parent.Path, parent.Info.Name())
 		return false
 	})
+}
+
+func TestGetParentPath(t *testing.T) {
+	assert.Equal(t, GetParentPath("/data/log/user"), "/data/log")
+	assert.Equal(t, GetParentPath("/data/log///user"), "/data/log")
+	assert.Equal(t, GetParentPath("/data/log/user/"), "/data/log")
+	assert.Equal(t, GetParentPath("/data"), "")
+
+	assert.Equal(t, GetParentPath("E:/data/log/user"), "E:/data/log")
+	assert.Equal(t, GetParentPath("E:\\data\\log\\user/"), "E:\\data\\log")
 }

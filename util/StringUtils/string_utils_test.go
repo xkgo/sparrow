@@ -64,3 +64,25 @@ func TestReplaceRange(t *testing.T) {
 	fmt.Println(ReplaceRange(str, propVal, startIndex, endIndex+len(placeholderSuffix)))
 
 }
+
+func TestIsFirstLetterLowerCase(t *testing.T) {
+
+	assert.True(t, IsFirstLetterLowerCase("a"))
+	assert.True(t, IsFirstLetterLowerCase("aaaa"))
+	assert.True(t, IsFirstLetterLowerCase("abc"))
+	assert.False(t, IsFirstLetterLowerCase(""))
+	assert.False(t, IsFirstLetterLowerCase("A"))
+	assert.False(t, IsFirstLetterLowerCase(" Aaa"))
+}
+
+func TestIsFirstLetterUpperCase(t *testing.T) {
+
+	assert.True(t, IsFirstLetterUpperCase("A"))
+	assert.True(t, IsFirstLetterUpperCase("Aaaa"))
+	assert.True(t, IsFirstLetterUpperCase("Abc"))
+	assert.False(t, IsFirstLetterUpperCase(""))
+	assert.False(t, IsFirstLetterUpperCase("a"))
+	assert.False(t, IsFirstLetterUpperCase(" aa"))
+	assert.False(t, IsFirstLetterUpperCase("1 aa"))
+	assert.False(t, IsFirstLetterUpperCase("中 aa"))
+}

@@ -250,3 +250,63 @@ func EqualsIgnoreCase(str1, str2 string) bool {
 	}
 	return strings.ToLower(str1) == strings.ToLower(str2)
 }
+
+func GetLowerLetter(str string, index int) (letter rune, exists bool) {
+	if index < 0 {
+		return 0, false
+	}
+	if index >= len(str) {
+		return 0, false
+	}
+	ch := rune(str[index])
+	if ch >= 'a' && ch <= 'z' {
+		return ch, true
+	}
+	return 0, false
+}
+
+func GetUpperLetter(str string, index int) (letter rune, exists bool) {
+	if index < 0 {
+		return 0, false
+	}
+	if index >= len(str) {
+		return 0, false
+	}
+	ch := rune(str[index])
+	if ch >= 'A' && ch <= 'Z' {
+		return ch, true
+	}
+	return 0, false
+}
+
+/**
+判断首字母是否小写
+*/
+func IsFirstLetterLowerCase(str string) bool {
+	if len(str) < 1 {
+		return false
+	}
+	if len(str) == 1 {
+		return strings.ToLower(str) == str
+	}
+	if _, ok := GetLowerLetter(str, 0); ok {
+		return true
+	}
+	return false
+}
+
+/**
+判断首字母是否是大写
+*/
+func IsFirstLetterUpperCase(str string) bool {
+	if len(str) < 1 {
+		return false
+	}
+	if len(str) == 1 {
+		return strings.ToUpper(str) == str
+	}
+	if _, ok := GetUpperLetter(str, 0); ok {
+		return true
+	}
+	return false
+}

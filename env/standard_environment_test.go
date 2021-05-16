@@ -2,7 +2,7 @@ package env
 
 import (
 	"fmt"
-	"github.com/magiconair/properties/assert"
+	"github.com/stretchr/testify/assert"
 	"github.com/xkgo/sparrow/logger"
 	"testing"
 	"time"
@@ -79,7 +79,11 @@ func TestStandardEnvironment_New(t *testing.T) {
 
 type UserInfo struct {
 	Id       int    `ck:"id"`
-	Username string `ck:"username"`
+	username string `ck:"username"`
+}
+
+func (u UserInfo) String() string {
+	return fmt.Sprintf("UserInfo{Id:%d, username:%s}", u.Id, u.username)
 }
 
 func TestStandardEnvironment_BindProperties(t *testing.T) {
@@ -93,11 +97,10 @@ func TestStandardEnvironment_BindProperties(t *testing.T) {
 	env := New(AdditionalPropertySources(additionalPropertySources))
 	user := &UserInfo{}
 
-	_ = env.BindProperties("user.", user)
+	_, _ = env.BindProperties("user.", user)
 
 	assert.Equal(t, 1, user.Id)
-	assert.Equal(t, "Hello_1", user.Username)
-	fmt.Println(env.GetProperty("GOPATH"))
+	assert.Equal(t, "Hello_1", user.username)
 }
 
 func TestStandardEnvironment_Toml(t *testing.T) {
@@ -120,7 +123,39 @@ func TestStandardEnvironment_BindLoggerProperties(t *testing.T) {
 	env := New(AdditionalPropertySources(additionalPropertySources))
 	props := &logger.Properties{}
 
-	_ = env.BindProperties("logger.", props)
+	_, _ = env.BindProperties("logger.", props)
 
 	fmt.Println(props)
+}
+
+func TestStandardEnvironment_MultiInclude(t *testing.T) {
+	env := New(
+		ConfigDirs("../testdata", "../testdata/yml"),
+		IgnoreUnresolvableNestedPlaceholders(true),
+	)
+
+	fmt.Println(env.activeProfiles)
+	fmt.Println(env.GetProperty("test.name"))
+
+}
+
+func TestStandardEnvironment_BindPropertiesListen(t *testing.T) {
+	env := New(
+		ConfigDirs("../testdata", "../testdata/yml"),
+		IgnoreUnresolvableNestedPlaceholders(true),
+	)
+
+	type Config struct {
+		PageSize int64 `sk:"page-size"`
+	}
+
+	config := &Config{}
+
+	bean, err := env.BindProperties("config.", config)
+	assert.Nil(t, err)
+
+	config = bean.(*Config)
+
+	assert.Equal(t, int64(0), config.PageSize)
+
 }

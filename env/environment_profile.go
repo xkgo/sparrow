@@ -122,9 +122,10 @@ type profileInfo struct {
 
 var defaultApplicationFileRegex, _ = regexp.Compile("(?i)^application\\.(properties|yml|toml)$")
 
-func getFirstDefaultApplicationProfileInfo(profileDirs []string) *profileInfo {
+func getDefaultApplicationProfileInfos(profileDirs []string) []*profileInfo {
+	resultList := make([]*profileInfo, 0)
 	if len(profileDirs) < 1 {
-		return nil
+		return resultList
 	}
 
 	for _, profileDir := range profileDirs {
@@ -136,15 +137,15 @@ func getFirstDefaultApplicationProfileInfo(profileDirs []string) *profileInfo {
 		}, 1)
 		if len(applicationFiles) > 0 {
 			applicationFile := applicationFiles[0]
-			return &profileInfo{
+			resultList = append(resultList, &profileInfo{
 				profile:   "",
 				extension: filepath.Ext(applicationFile.Path),
 				path:      applicationFile.Path,
-			}
+			})
 		}
 	}
 
-	return nil
+	return resultList
 }
 
 func getNotDefaultProfileInfoWithExtension(profileDirs []string, extension string) map[string][]*profileInfo {
