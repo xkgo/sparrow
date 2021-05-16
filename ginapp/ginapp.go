@@ -9,7 +9,8 @@ import (
 )
 
 type ServerProperties struct {
-	Port int `ck:"port" def:"8088"`
+	Port           int      `ck:"port" def:"8088"`
+	TraceIdHeaders []string `ck:"trace-id-headers" def:"[\"trace-id\",\"traceid\"]"`
 }
 
 type GinServer struct {
