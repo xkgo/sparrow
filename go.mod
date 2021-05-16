@@ -3,6 +3,7 @@ module github.com/xkgo/sparrow
 go 1.15
 
 require (
+	github.com/gin-gonic/gin v1.7.1 // indirect
 	github.com/magiconair/properties v1.8.1
 	github.com/natefinch/lumberjack v2.0.0+incompatible
 	github.com/spf13/afero v1.1.2
