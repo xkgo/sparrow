@@ -8,6 +8,7 @@ import (
 	"github.com/xkgo/sparrow/util/GoUtils"
 	"github.com/xkgo/sparrow/util/ReflectUtils"
 	"os"
+	"os/signal"
 	"path/filepath"
 	"reflect"
 	"sort"
@@ -253,8 +254,12 @@ func (a *Application) Run(environment env.Environment, options ...Option) (err e
 		}
 	}
 
-	// 自动执行注册过来的Bean的销毁方法
+	// 等待退出
+	quit := make(chan os.Signal, 1)
+	signal.Notify(quit, os.Interrupt)
+	<-quit
 
+	// 自动执行注册过来的Bean的销毁方法
 	// 程序结束
 	if nil != a.destroyer {
 		err = a.destroyer(a)
