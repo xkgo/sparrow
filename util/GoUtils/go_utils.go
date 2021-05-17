@@ -186,9 +186,9 @@ func BindContextWithTraceId(ctx *context.Context, traceId string, dataPairs ...*
 			// 尝试从 context 中解析出来，没有的话就直接创建一个新的
 			if traceIdGetter != nil {
 				traceId = traceIdGetter(ctx)
-				if len(traceId) < 1 {
-					traceId = RandomUtils.RandomLetterAndNumberString(10)
-				}
+			}
+			if len(traceId) < 1 {
+				traceId = RandomUtils.RandomLetterAndNumberString(10)
 			}
 		}
 	}

@@ -19,6 +19,7 @@ func (h *HelloController) RequestMappings() (mappings []RequestMapping) {
 }
 
 func (h *HelloController) sayHello(c *gin.Context) {
+	logger.Infof("SayHello请求：", c.Query("name"))
 	c.JSON(http.StatusOK, "Hello, "+c.Query("name"))
 }
 

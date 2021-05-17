@@ -9,8 +9,12 @@ import (
 )
 
 type ServerProperties struct {
-	Port           int      `ck:"port" def:"8088"`
-	TraceIdHeaders []string `ck:"trace-id-headers" def:"[\"trace-id\",\"traceid\"]"`
+	Port              int      `ck:"port" def:"8088"`
+	TraceIdHeaders    []string `ck:"trace-id-headers" def:"[\"trace-id\",\"traceid\"]"` // 读取哪些header字段作为traceId
+	CorsOrigins       string   `ck:"cors-origins" def:""`                               // 使用英文逗号分隔
+	CorsAllowHeaders  string   `ck:"cors-allow-headers" def:""`                         // 使用英文逗号分隔
+	CorsAllowMethods  string   `ck:"cors-allow-methods" def:""`                         // 使用英文逗号分隔
+	CorsExposeHeaders string   `ck:"cors-expose-headers" def:""`                        // 使用英文逗号分隔
 }
 
 type GinServer struct {

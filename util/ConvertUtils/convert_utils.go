@@ -298,3 +298,110 @@ func ToBoolWithDef(val string, def bool) bool {
 	}
 	return ret
 }
+
+func Int64MapToList(m map[int64]bool) []int64 {
+	list := make([]int64, 0)
+	if len(m) < 1 {
+		return list
+	}
+	for k, _ := range m {
+		list = append(list, k)
+	}
+	return list
+}
+
+func StringMapToList(m map[string]bool) []string {
+	list := make([]string, 0)
+	if len(m) < 1 {
+		return list
+	}
+	for k, _ := range m {
+		list = append(list, k)
+	}
+	return list
+}
+
+func Int64ArrToSetList(arr []int64) []int64 {
+	if len(arr) < 1 {
+		return arr
+	}
+	finalList := make([]int64, 0)
+	exists := make(map[int64]bool)
+	for _, item := range arr {
+		if _, ok := exists[item]; !ok {
+			finalList = append(finalList, item)
+		}
+	}
+	return finalList
+}
+
+func ContainsInt64(val int64, arr []int64) bool {
+	if len(arr) < 1 {
+		return false
+	}
+	for _, v := range arr {
+		if v == val {
+			return true
+		}
+	}
+	return false
+}
+
+func SplitAsInt64s(str, sep string, errToZero bool) ([]int64, error) {
+	if len(str) < 1 {
+		return []int64{}, nil
+	}
+	arr := strings.Split(str, sep)
+	return StringArrayAsInt64s(arr, errToZero)
+}
+
+func StringArrayAsInt64s(arr []string, errToZero bool) ([]int64, error) {
+	retList := make([]int64, 0)
+	for _, item := range arr {
+		v, err := strconv.ParseInt(item, 10, 64)
+		if nil != err {
+			if !errToZero {
+				return retList, err
+			}
+		}
+		retList = append(retList, v)
+	}
+	return retList, nil
+}
+
+func ToInt64ExistsMap(arr []int64) map[int64]bool {
+	return ToInt64BoolMap(arr, true)
+}
+
+func ToInt64BoolMap(arr []int64, def bool) map[int64]bool {
+	if len(arr) < 1 {
+		return map[int64]bool{}
+	}
+	emap := make(map[int64]bool)
+	for _, v := range arr {
+		emap[v] = def
+	}
+	return emap
+}
+
+func ToStringBoolMap(arr []string, def bool) map[string]bool {
+	if len(arr) < 1 {
+		return map[string]bool{}
+	}
+	emap := make(map[string]bool)
+	for _, v := range arr {
+		emap[v] = def
+	}
+	return emap
+}
+
+func ToStringIntMap(arr []string, def int) map[string]int {
+	if len(arr) < 1 {
+		return map[string]int{}
+	}
+	emap := make(map[string]int)
+	for _, v := range arr {
+		emap[v] = def
+	}
+	return emap
+}

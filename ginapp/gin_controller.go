@@ -1,10 +1,17 @@
 package ginapp
 
 import (
+	"context"
 	"errors"
+	"fmt"
 	"github.com/gin-gonic/gin"
 	"github.com/xkgo/sparrow"
 	"github.com/xkgo/sparrow/logger"
+	"github.com/xkgo/sparrow/util/ConvertUtils"
+	"github.com/xkgo/sparrow/util/GoUtils"
+	"github.com/xkgo/sparrow/util/StringUtils"
+	"net/http"
+	"net/url"
 	"strings"
 )
 
@@ -56,15 +63,19 @@ type Configure interface {
 }
 
 type GinRegistry struct {
-	Engine      *gin.Engine     `@Inject:"required=true"`
-	Configures  []Configure     `@Inject:"required=false"`
-	Controllers []GinController `@Inject:"required=false"` // 注入所有的 Controller
+	Properties  *ServerProperties `@Inject:"required:true"`
+	Engine      *gin.Engine       `@Inject:"required=true"`
+	Configures  []Configure       `@Inject:"required=false"`
+	Controllers []GinController   `@Inject:"required=false"` // 注入所有的 Controller
 }
 
 /**
 初始化函数
 */
 func (r *GinRegistry) Init(app *sparrow.Application) {
+
+	// TraceId and cors
+	r.prepareTraceIdAndCors()
 
 	// 初始化配置
 	if len(r.Configures) > 0 {
@@ -94,4 +105,140 @@ func (r *GinRegistry) Init(app *sparrow.Application) {
 			}
 		}
 	}
+}
+
+/**
+TraceId 和 CORS
+*/
+func (r *GinRegistry) prepareTraceIdAndCors() {
+	r.Engine.Use(func(context *gin.Context) {
+
+		defer func() {
+			GoUtils.UnbindContext()
+		}()
+
+		// trace
+		r.prepareTraceId(context)
+
+		// 跨域处理
+		if r.prepareCors(context) {
+			return
+		}
+
+		context.Next()
+	})
+}
+
+/**
+TraceId
+*/
+func (r *GinRegistry) prepareTraceId(c *gin.Context) {
+	defer func() {
+		if r := recover(); r != nil {
+			_ = fmt.Errorf("prepare trace id panic recover: trace panic info:%v", r)
+		}
+	}()
+	var ctx context.Context = c
+	traceIdHeaders := r.Properties.TraceIdHeaders
+	traceId := ""
+	if nil != traceIdHeaders && len(traceIdHeaders) > 0 {
+		for _, traceIdHeader := range traceIdHeaders {
+			traceId = c.GetHeader(traceIdHeader)
+			if len(traceId) > 0 {
+				break
+			}
+		}
+	}
+	// 绑定 TraceId
+	GoUtils.BindContextWithTraceId(&ctx, traceId)
+}
+
+/**
+跨域
+*/
+func (r *GinRegistry) prepareCors(c *gin.Context) (stop bool) {
+	defer func() {
+		if r := recover(); r != nil {
+			_ = fmt.Errorf("prepare cors panic recover: trace panic info:%v", r)
+		}
+	}()
+
+	// 跨域, 计算 origin
+	origin := r.Properties.CorsOrigins
+	if len(r.Properties.CorsOrigins) > 0 {
+		if r.Properties.CorsOrigins == "*" {
+			// 允许所有
+			requestOrigin := c.GetHeader("Origin")
+			if len(requestOrigin) < 1 {
+				referer := c.Request.Referer()
+				if len(referer) > 0 {
+					refererUrl, e := url.Parse(referer)
+					if nil == e {
+						requestOrigin = refererUrl.Scheme + "://" + refererUrl.Host
+					}
+				}
+			}
+			origin = requestOrigin
+		}
+	}
+	c.Writer.Header().Add("Access-Control-Allow-Origin", origin)
+
+	// 计算 allowHeaders
+	allowHeaders := r.Properties.CorsAllowHeaders
+	if allowHeaders == "*" {
+		// 允许所有的 headers，直接计算请求头中的 header，然后加到这里来
+		headers := make([]string, 0)
+		for k, _ := range c.Request.Header {
+			headers = append(headers, k)
+		}
+		allowHeaders = strings.Join(headers, ",")
+	}
+	c.Writer.Header().Add("Access-Control-Allow-Headers", allowHeaders)
+
+	// 计算允许的方法
+	allowMethods := r.Properties.CorsAllowMethods
+	if allowMethods == "*" {
+		// 允许所有的 headers，直接计算请求头中的 header，然后加到这里来
+		allowMethods = "POST, GET, OPTIONS, DELETE, PATCH"
+	}
+	c.Writer.Header().Add("Access-Control-Allow-Methods", allowMethods)
+
+	// 允许 Expose 的请求头
+	c.Writer.Header().Add("Access-Control-Expose-Headers", r.mergeHeaders("Content-Length, Access-Control-Allow-Origin, Access-Control-Allow-Headers, Content-Type, X-AuthType, x-requested-with, Access-Token", r.Properties.CorsExposeHeaders))
+
+	c.Writer.Header().Add("Access-Control-Allow-Credentials", "true")
+
+	//放行所有OPTIONS方法
+	if c.Request.Method == http.MethodOptions {
+		logger.Infof("请求来源, referer:%s, origin:%s", c.Request.Referer(), origin)
+		c.Writer.WriteHeader(http.StatusNoContent)
+		return true
+	}
+
+	return false
+}
+
+func (r *GinRegistry) mergeHeaders(headers1, headers2 string) string {
+	if len(headers1) < 1 && len(headers2) < 1 {
+		return ""
+	}
+	if len(headers1) > 0 && len(headers2) < 1 {
+		return headers1
+	}
+	if len(headers1) < 1 && len(headers2) > 0 {
+		return headers2
+	}
+	arr1 := ConvertUtils.ToStringBoolMap(StringUtils.SplitByRegex(headers1, ",\\s+"), true)
+	arr2 := ConvertUtils.ToStringBoolMap(StringUtils.SplitByRegex(headers2, ",\\s+"), true)
+
+	finalArr := make([]string, 0)
+	for v1, _ := range arr1 {
+		finalArr = append(finalArr, v1)
+	}
+	for v2, _ := range arr2 {
+		if _, ok := arr1[v2]; !ok {
+			finalArr = append(finalArr, v2)
+		}
+	}
+	return strings.Join(finalArr, ", ")
 }
